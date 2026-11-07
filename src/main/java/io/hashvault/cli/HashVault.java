@@ -14,7 +14,8 @@ public final class HashVault {
               list <vault>
               history <vault> <filename>
               verify <vault>
-              stats <vault>\n              cache <vault>
+              stats <vault>
+              cache <vault>
               gc <vault> [--apply]
             """);
     }
@@ -32,7 +33,8 @@ public final class HashVault {
             switch (command) {
                 case "put" -> {
                     if (args.length < 3) { usage(); return; }
-                    String mode = option(args, "--chunker=", "fixed");\n                    engine.configureCompression(io.hashvault.store.CompressionCodec.parse(option(args, "--compression=", "auto")));
+                    String mode = option(args, "--chunker=", "fixed");
+                    engine.configureCompression(io.hashvault.store.CompressionCodec.parse(option(args, "--compression=", "auto")));
                     int size = Integer.parseInt(option(args, "--chunk-size=", "1048576"));
                     int threads = Integer.parseInt(option(args, "--threads=", Integer.toString(Runtime.getRuntime().availableProcessors())));
                     Chunker chunker = mode.equalsIgnoreCase("cdc")
@@ -58,7 +60,8 @@ public final class HashVault {
                 }
                 case "verify" -> { engine.verify(); System.out.println("All manifests and objects verified."); }
                 case "recover" -> System.out.println("Startup recovery: " + engine.recoveryReport());
-                case "stats" -> System.out.println(engine.deduplicationReport());\n                case "cache" -> System.out.println(engine.cacheStats());
+                case "stats" -> System.out.println(engine.deduplicationReport());
+                case "cache" -> System.out.println(engine.cacheStats());
                 case "gc" -> {
                     boolean apply = java.util.Arrays.asList(args).contains("--apply");
                     System.out.println(engine.garbageCollect(!apply));
