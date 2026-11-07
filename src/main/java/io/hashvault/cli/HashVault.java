@@ -2,6 +2,7 @@ package io.hashvault.cli;
 import io.hashvault.chunk.*;
 import io.hashvault.index.Manifest;
 import io.hashvault.store.HashVaultEngine;
+import io.hashvault.store.VaultBackup;
 import java.nio.file.Path;
 public final class HashVault {
     private static void usage() {
@@ -10,6 +11,8 @@ public final class HashVault {
             Commands:
               init <vault> [--encrypt]
               encrypt <vault>
+              backup <vault> <backup.hvb>
+              restore <backup.hvb> <new-vault-directory>
               put <vault> <file> [--chunker=fixed|cdc] [--chunk-size=BYTES] [--threads=N] [--compression=auto|gzip|none]
               get <vault> <manifest-id> <output-file>
               list <vault>
@@ -35,12 +38,23 @@ public final class HashVault {
                 } else System.out.println("Initialized vault at " + Path.of(args[1]).toAbsolutePath());
                 return;
             }
+            if (command.equals("restore")) {
+                if (args.length < 3) { usage(); return; }
+                VaultBackup.restore(Path.of(args[1]), Path.of(args[2]), passwordFromEnvironment());
+                System.out.println("Encrypted backup restored to " + Path.of(args[2]).toAbsolutePath());
+                return;
+            }
             if (args.length < 2) { usage(); return; }
             HashVaultEngine engine = new HashVaultEngine(Path.of(args[1]));
             switch (command) {
                 case "encrypt" -> {
                     engine.enableEncryption(passwordFromEnvironment());
                     System.out.println("Vault objects encrypted with AES-256-GCM.");
+                }
+                case "backup" -> {
+                    if (args.length < 3) { usage(); return; }
+                    VaultBackup.create(Path.of(args[1]), Path.of(args[2]), passwordFromEnvironment());
+                    System.out.println("Encrypted backup created at " + Path.of(args[2]).toAbsolutePath());
                 }
                 case "put" -> {
                     if (args.length < 3) { usage(); return; }
