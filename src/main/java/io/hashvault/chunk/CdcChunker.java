@@ -2,9 +2,10 @@ package io.hashvault.chunk;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-/** Deterministic rolling-hash chunking with minimum and maximum boundaries. */
+/**
+ * Gear-hash content-defined chunking. Memory is bounded by maxSize plus one
+ * input buffer; completed chunks are immediately passed to the consumer.
+ */
 public final class CdcChunker implements Chunker {
     private final int minSize, averageSize, maxSize;
     private final long mask;
@@ -16,21 +17,25 @@ public final class CdcChunker implements Chunker {
         this.mask = (1L << bits) - 1;
     }
     @Override public String name() { return "cdc:" + minSize + ":" + averageSize + ":" + maxSize; }
-    @Override public List<byte[]> split(InputStream in) throws IOException {
-        List<byte[]> chunks = new ArrayList<>();
+    @Override public void forEachChunk(InputStream in, ChunkConsumer consumer) throws IOException {
         ByteArrayOutputStream current = new ByteArrayOutputStream(maxSize);
+        byte[] buffer = new byte[64 * 1024];
         long hash = 0;
-        int value;
-        while ((value = in.read()) != -1) {
-            current.write(value);
-            hash = Long.rotateLeft(hash, 1) ^ gear(value);
-            int size = current.size();
-            if (size >= minSize && ((hash & mask) == 0 || size >= maxSize)) {
-                chunks.add(current.toByteArray()); current.reset(); hash = 0;
+        int count;
+        while ((count = in.read(buffer)) != -1) {
+            for (int i = 0; i < count; i++) {
+                int value = buffer[i] & 0xff;
+                current.write(value);
+                hash = Long.rotateLeft(hash, 1) ^ gear(value);
+                int size = current.size();
+                if (size >= minSize && ((hash & mask) == 0 || size >= maxSize)) {
+                    consumer.accept(current.toByteArray());
+                    current.reset();
+                    hash = 0;
+                }
             }
         }
-        if (current.size() > 0) chunks.add(current.toByteArray());
-        return chunks;
+        if (current.size() > 0) consumer.accept(current.toByteArray());
     }
     private static long gear(int b) {
         long z = (b & 0xffL) + 0x9e3779b97f4a7c15L;
