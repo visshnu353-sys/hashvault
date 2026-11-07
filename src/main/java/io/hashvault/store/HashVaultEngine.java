@@ -19,20 +19,24 @@ public final class HashVaultEngine {
         Files.createDirectories(this.root);
         objects = new ObjectStore(this.root);
         VaultCrypto crypto = new VaultCrypto(this.root);
+        byte[] vaultKey = null;
         if (crypto.isEnabled()) {
             char[] password = passwordFromEnvironment();
-            byte[] key = null;
             try {
-                key = crypto.unlock(password);
-                objects.setEncryptionKey(key);
+                vaultKey = crypto.unlock(password);
+                objects.setEncryptionKey(vaultKey);
             } finally {
-                if (key != null) java.util.Arrays.fill(key, (byte) 0);
                 java.util.Arrays.fill(password, (char) 0);
             }
         }
-        index = new ManifestIndex(this.root);
+        index = new ManifestIndex(this.root, vaultKey);
+        if (vaultKey != null) java.util.Arrays.fill(vaultKey, (byte) 0);
         journal = new TransactionLog(this.root);
         try (VaultLock ignored = VaultLock.acquire(this.root)) {
+            if (crypto.isEnabled()) {
+                objects.encryptExistingObjects();
+                index.encryptExistingManifests();
+            }
             recoveryReport = journal.recover(index::exists);
         }
     }
@@ -50,7 +54,9 @@ public final class HashVaultEngine {
             byte[] key = crypto.isEnabled() ? crypto.unlock(password) : crypto.initialize(password);
             try {
                 objects.setEncryptionKey(key);
+                index.setEncryptionKey(key);
                 objects.encryptExistingObjects();
+                index.encryptExistingManifests();
             } finally {
                 java.util.Arrays.fill(key, (byte) 0);
             }
