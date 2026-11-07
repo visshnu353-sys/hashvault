@@ -41,7 +41,7 @@ public final class HashVaultEngine {
     public void enableEncryption(char[] password) throws IOException {
         try (VaultLock ignored = VaultLock.acquire(root)) {
             VaultCrypto crypto = new VaultCrypto(root);
-            byte[] key = crypto.initialize(password);
+            byte[] key = crypto.isEnabled() ? crypto.unlock(password) : crypto.initialize(password);
             try {
                 objects.setEncryptionKey(key);
                 objects.encryptExistingObjects();
