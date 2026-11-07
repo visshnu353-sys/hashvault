@@ -3,7 +3,7 @@ import java.io.*;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
+import java.util.*;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 public final class ObjectStore {
@@ -12,11 +12,9 @@ public final class ObjectStore {
     private final Path root;
     public ObjectStore(Path root) throws IOException { this.root = root.resolve("objects"); Files.createDirectories(this.root); }
     public String put(byte[] data) throws IOException {
-        String hash = sha256(data);
-        Path target = pathFor(hash);
+        String hash = sha256(data); Path target = pathFor(hash);
         if (Files.exists(target)) return hash;
-        byte[] compressed = gzip(data);
-        boolean useGzip = compressed.length < data.length;
+        byte[] compressed = gzip(data); boolean useGzip = compressed.length < data.length;
         Files.createDirectories(target.getParent());
         Path temp = Files.createTempFile(target.getParent(), ".object-", ".tmp");
         try {
@@ -24,13 +22,10 @@ public final class ObjectStore {
                 out.writeInt(MAGIC); out.writeByte(useGzip ? GZIP : RAW); out.writeInt(data.length);
                 out.write(useGzip ? compressed : data);
             }
-            // Atomic publication: competing writers can only expose complete objects.
-            // Identical hashes necessarily represent identical uncompressed bytes.
             try { Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE); }
-            catch (FileAlreadyExistsException exists) { /* another writer published it */ }
+            catch (FileAlreadyExistsException exists) { /* identical object already published */ }
             catch (AtomicMoveNotSupportedException unsupported) {
-                try { Files.move(temp, target); }
-                catch (FileAlreadyExistsException exists) { /* another writer won */ }
+                try { Files.move(temp, target); } catch (FileAlreadyExistsException exists) { /* identical object already published */ }
             }
         } finally { Files.deleteIfExists(temp); }
         return hash;
@@ -50,6 +45,18 @@ public final class ObjectStore {
             return bytes;
         }
     }
+    public Set<String> hashes() throws IOException {
+        Set<String> result = new HashSet<>();
+        try (var walk = Files.walk(root)) {
+            for (Path p : walk.filter(Files::isRegularFile).toList()) {
+                String name = p.getFileName().toString();
+                if (name.matches("[a-f0-9]{64}\\.blob")) result.add(name.substring(0, 64));
+            }
+        }
+        return result;
+    }
+    public long size(String hash) throws IOException { return Files.size(pathFor(hash)); }
+    public void delete(String hash) throws IOException { Files.deleteIfExists(pathFor(hash)); }
     public long storedBytes() throws IOException {
         try (var walk = Files.walk(root)) {
             return walk.filter(Files::isRegularFile).mapToLong(p -> {
