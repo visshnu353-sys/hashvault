@@ -93,4 +93,24 @@ class VaultSecurityTest {
             VaultBackup.restore(backup, target, "another wrong passphrase".toCharArray()));
         assertFalse(Files.exists(target));
     }
+
+    @Test void engineEncryptionMigratesPriorVaultObjects() throws Exception {
+        Path vault = temp.resolve("engine-encryption");
+        Path source = temp.resolve("before-encryption.txt");
+        Files.writeString(source, "existing content is migrated before future writes");
+        io.hashvault.store.HashVaultEngine engine = new io.hashvault.store.HashVaultEngine(vault);
+        var manifest = engine.put(source, new io.hashvault.chunk.FixedChunker(64), 1);
+        String hash = manifest.chunks.get(0).hash;
+        Path blob = vault.resolve("objects").resolve(hash.substring(0, 2)).resolve(hash + ".blob");
+        assertEquals(0, Files.readAllBytes(blob)[4]);
+        engine.enableEncryption("strong vault password".toCharArray());
+        assertTrue(engine.encryptionEnabled());
+        assertEquals(2, Files.readAllBytes(blob)[4]);
+        byte[] key = new VaultCrypto(vault).unlock("strong vault password".toCharArray());
+        ObjectStore reopened = new ObjectStore(vault, 0);
+        reopened.setEncryptionKey(key);
+        assertArrayEquals(Files.readAllBytes(source), reopened.get(hash));
+        java.util.Arrays.fill(key, (byte) 0);
+    }
+
 }
