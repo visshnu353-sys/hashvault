@@ -40,4 +40,25 @@ class HashVaultEngineTest {
         assertArrayEquals(data, Files.readAllBytes(output));
         engine.verify();
     }
+    @Test void handlesEmptyFileWithoutCreatingObjects() throws Exception {
+        Path input = temp.resolve("empty"), output = temp.resolve("restored");
+        Files.write(input, new byte[0]);
+        HashVaultEngine engine = new HashVaultEngine(temp.resolve("vault"));
+        var manifest = engine.put(input, new FixedChunker(4096));
+        assertTrue(manifest.chunks.isEmpty());
+        engine.get(manifest.id, output);
+        assertEquals(0, Files.size(output));
+        engine.verify();
+    }
+    @Test void streamsLargeFileAndRespectsCdcMaximum() throws Exception {
+        Path input = temp.resolve("large.bin"), output = temp.resolve("large-restored.bin");
+        byte[] data = new byte[3 * 1024 * 1024 + 17];
+        for (int i = 0; i < data.length; i++) data[i] = (byte)(i * 31);
+        Files.write(input, data);
+        HashVaultEngine engine = new HashVaultEngine(temp.resolve("vault"));
+        var manifest = engine.put(input, new CdcChunker(4096, 8192, 16384));
+        assertTrue(manifest.chunks.stream().allMatch(c -> c.size <= 16384));
+        engine.get(manifest.id, output);
+        assertArrayEquals(data, Files.readAllBytes(output));
+    }
 }
