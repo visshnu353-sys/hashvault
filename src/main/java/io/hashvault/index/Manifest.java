@@ -6,6 +6,8 @@ public final class Manifest {
     public String filename;
     public long originalSize;
     public String chunker;
+    public String previousVersionId;
+    public long createdAt;
     public List<ChunkRef> chunks = new ArrayList<>();
     public static final class ChunkRef {
         public String hash;
