@@ -62,15 +62,26 @@ class HashVaultEngineTest {
         engine.get(first.id, oldCopy);
         assertEquals("version one", Files.readString(oldCopy));
     }
+    @Test void repeatedUnchangedImportDoesNotCreateNewVersion() throws Exception {
+        Path input = temp.resolve("same.txt");
+        Files.writeString(input, "identical bytes");
+        HashVaultEngine engine = new HashVaultEngine(temp.resolve("vault"));
+        var first = engine.put(input, new FixedChunker(4), 1);
+        var second = engine.put(input, new FixedChunker(4), 1);
+        assertEquals(first.id, second.id);
+        assertEquals(1, engine.history("same.txt").size());
+    }
     @Test void garbageCollectionOnlyRemovesUnreferencedObjects() throws Exception {
         Path input = temp.resolve("kept.txt");
         Files.writeString(input, "keep this content");
         HashVaultEngine engine = new HashVaultEngine(temp.resolve("vault"));
         engine.put(input, new FixedChunker(5), 1);
+        new io.hashvault.store.ObjectStore(temp.resolve("vault")).put("orphaned data".getBytes());
         var dry = engine.garbageCollect(true);
-        assertEquals(0, dry.get("unreferencedObjects"));
+        assertEquals(1, dry.get("unreferencedObjects"));
+        assertEquals(0, engine.garbageCollect(true).get("deletedObjects"));
         var applied = engine.garbageCollect(false);
-        assertEquals(0, applied.get("deletedObjects"));
+        assertEquals(1, applied.get("deletedObjects"));
         engine.verify();
     }
 }
