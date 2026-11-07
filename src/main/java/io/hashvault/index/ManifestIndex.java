@@ -20,6 +20,9 @@ public final class ManifestIndex {
             }
         } finally { Files.deleteIfExists(temp); }
     }
+    public boolean exists(String id) {
+        return id != null && id.matches("[a-f0-9]{64}") && Files.isRegularFile(dir.resolve(id + ".json"));
+    }
     public Manifest load(String id) throws IOException {
         if (id == null || !id.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid manifest id");
         return mapper.readValue(dir.resolve(id + ".json").toFile(), Manifest.class);
