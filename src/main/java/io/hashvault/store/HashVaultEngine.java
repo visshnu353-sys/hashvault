@@ -21,8 +21,14 @@ public final class HashVaultEngine {
         VaultCrypto crypto = new VaultCrypto(this.root);
         if (crypto.isEnabled()) {
             char[] password = passwordFromEnvironment();
-            try { objects.setEncryptionKey(crypto.unlock(password)); }
-            finally { java.util.Arrays.fill(password, (char) 0); }
+            byte[] key = null;
+            try {
+                key = crypto.unlock(password);
+                objects.setEncryptionKey(key);
+            } finally {
+                if (key != null) java.util.Arrays.fill(key, (byte) 0);
+                java.util.Arrays.fill(password, (char) 0);
+            }
         }
         index = new ManifestIndex(this.root);
         journal = new TransactionLog(this.root);
