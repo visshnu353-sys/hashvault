@@ -6,15 +6,37 @@ import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
+
 public final class ObjectStore {
     private static final int MAGIC = 0x48564c54;
     private static final byte RAW = 0, GZIP = 1;
     private final Path root;
-    public ObjectStore(Path root) throws IOException { this.root = root.resolve("objects"); Files.createDirectories(this.root); }
+    private final ObjectCache cache;
+    private volatile CompressionCodec compression = CompressionCodec.AUTO;
+
+    public ObjectStore(Path root) throws IOException {
+        this(root, Long.getLong("hashvault.cacheBytes", 32L * 1024 * 1024));
+    }
+    public ObjectStore(Path root, long cacheBytes) throws IOException {
+        this.root = root.resolve("objects");
+        this.cache = new ObjectCache(cacheBytes);
+        Files.createDirectories(this.root);
+    }
+    public void setCompression(CompressionCodec codec) { this.compression = Objects.requireNonNull(codec); }
+    public Map<String, Long> cacheStats() { return cache.stats(); }
+
     public String put(byte[] data) throws IOException {
-        String hash = sha256(data); Path target = pathFor(hash);
+        String hash = sha256(data);
+        Path target = pathFor(hash);
         if (Files.exists(target)) return hash;
-        byte[] compressed = gzip(data); boolean useGzip = compressed.length < data.length;
+        byte[] compressed = compression == CompressionCodec.NONE ? data : gzip(data);
+        boolean useGzip = compression == CompressionCodec.GZIP
+                || (compression == CompressionCodec.AUTO && compressed.length < data.length);
+        if (useGzip && compression == CompressionCodec.GZIP) {
+            // Explicit GZIP is honored even when the payload grows.
+        } else if (compression == CompressionCodec.AUTO && compressed.length >= data.length) {
+            useGzip = false;
+        }
         Files.createDirectories(target.getParent());
         Path temp = Files.createTempFile(target.getParent(), ".object-", ".tmp");
         try {
@@ -23,15 +45,19 @@ public final class ObjectStore {
                 out.write(useGzip ? compressed : data);
             }
             try { Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE); }
-            catch (FileAlreadyExistsException exists) { /* identical object already published */ }
+            catch (FileAlreadyExistsException exists) { /* Identical object already published. */ }
             catch (AtomicMoveNotSupportedException unsupported) {
-                try { Files.move(temp, target); } catch (FileAlreadyExistsException exists) { /* identical object already published */ }
+                try { Files.move(temp, target); } catch (FileAlreadyExistsException exists) { /* Already published. */ }
             }
         } finally { Files.deleteIfExists(temp); }
+        cache.put(hash, data);
         return hash;
     }
+
     public byte[] get(String hash) throws IOException {
         if (hash == null || !hash.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid SHA-256 object id");
+        byte[] cached = cache.get(hash);
+        if (cached != null) return cached;
         try (DataInputStream in = new DataInputStream(new BufferedInputStream(Files.newInputStream(pathFor(hash))))) {
             if (in.readInt() != MAGIC) throw new IOException("Invalid object header: " + hash);
             byte codec = in.readByte(); int length = in.readInt();
@@ -42,9 +68,11 @@ public final class ObjectStore {
             else throw new IOException("Unknown object codec: " + codec);
             byte[] bytes = payload.readAllBytes();
             if (bytes.length != length || !sha256(bytes).equals(hash)) throw new IOException("Object integrity check failed: " + hash);
+            cache.put(hash, bytes);
             return bytes;
         }
     }
+
     public Set<String> hashes() throws IOException {
         Set<String> result = new HashSet<>();
         try (var walk = Files.walk(root)) {
@@ -56,7 +84,10 @@ public final class ObjectStore {
         return result;
     }
     public long size(String hash) throws IOException { return Files.size(pathFor(hash)); }
-    public void delete(String hash) throws IOException { Files.deleteIfExists(pathFor(hash)); }
+    public void delete(String hash) throws IOException {
+        Files.deleteIfExists(pathFor(hash));
+        cache.invalidate(hash);
+    }
     public long storedBytes() throws IOException {
         try (var walk = Files.walk(root)) {
             return walk.filter(Files::isRegularFile).mapToLong(p -> {
