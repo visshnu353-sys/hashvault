@@ -9,11 +9,13 @@ public final class HashVault {
             HashVault - content-addressable storage
             Commands:
               init <vault>
-              put <vault> <file> [--chunker=fixed|cdc] [--chunk-size=BYTES]
+              put <vault> <file> [--chunker=fixed|cdc] [--chunk-size=BYTES] [--threads=N]
               get <vault> <manifest-id> <output-file>
               list <vault>
+              history <vault> <filename>
               verify <vault>
               stats <vault>
+              gc <vault> [--apply]
             """);
     }
     public static void main(String[] args) {
@@ -32,10 +34,12 @@ public final class HashVault {
                     if (args.length < 3) { usage(); return; }
                     String mode = option(args, "--chunker=", "fixed");
                     int size = Integer.parseInt(option(args, "--chunk-size=", "1048576"));
+                    int threads = Integer.parseInt(option(args, "--threads=", Integer.toString(Runtime.getRuntime().availableProcessors())));
                     Chunker chunker = mode.equalsIgnoreCase("cdc")
                         ? new CdcChunker(16 * 1024, 64 * 1024, 256 * 1024) : new FixedChunker(size);
-                    Manifest m = engine.put(Path.of(args[2]), chunker);
+                    Manifest m = engine.put(Path.of(args[2]), chunker, threads);
                     System.out.println("Manifest: " + m.id);
+                    System.out.println("Previous version: " + m.previousVersionId);
                     System.out.println("Chunks: " + m.chunks.size() + " | Original bytes: " + m.originalSize);
                 }
                 case "get" -> {
@@ -46,12 +50,17 @@ public final class HashVault {
                     for (Manifest m : engine.list())
                         System.out.printf("%s  %s  %d bytes  %d chunks%n", m.id, m.filename, m.originalSize, m.chunks.size());
                 }
+                case "history" -> {
+                    if (args.length < 3) { usage(); return; }
+                    for (Manifest m : engine.history(args[2]))
+                        System.out.printf("%s  %s  %d bytes  %d chunks  parent=%s%n", m.id,
+                            java.time.Instant.ofEpochMilli(m.createdAt), m.originalSize, m.chunks.size(), m.previousVersionId);
+                }
                 case "verify" -> { engine.verify(); System.out.println("All manifests and objects verified."); }
-                case "stats" -> {
-                    long logical = engine.list().stream().mapToLong(m -> m.originalSize).sum();
-                    System.out.println("Manifests: " + engine.list().size());
-                    System.out.println("Logical bytes (sum of imports): " + logical);
-                    System.out.println("Stored object bytes: " + engine.storedBytes());
+                case "stats" -> System.out.println(engine.deduplicationReport());
+                case "gc" -> {
+                    boolean apply = java.util.Arrays.asList(args).contains("--apply");
+                    System.out.println(engine.garbageCollect(!apply));
                 }
                 default -> usage();
             }
