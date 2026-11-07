@@ -66,7 +66,7 @@ public final class Manifest {
         if (id == null || !id.matches("[a-f0-9]{64}") || filename == null || chunker == null || chunks == null
                 || !id.equals(identity())) errors.add("manifest identity mismatch");
         if (formatVersion < 0 || formatVersion > CURRENT_FORMAT_VERSION) errors.add("unsupported manifest format version: " + formatVersion);
-        if (formatVersion >= 1 && (checksum == null || !checksum.equals(checksumValue()))) errors.add("manifest checksum mismatch");
+        if (formatVersion >= 1 && (chunks == null || checksum == null || !checksum.equals(checksumValue()))) errors.add("manifest checksum mismatch");
         return errors;
     }
 }
