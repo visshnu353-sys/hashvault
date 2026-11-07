@@ -11,12 +11,17 @@ public final class ManifestIndex {
     public void save(Manifest manifest) throws IOException {
         Path target = dir.resolve(manifest.id + ".json");
         Path temp = Files.createTempFile(dir, ".manifest-", ".tmp");
-        mapper.writeValue(temp.toFile(), manifest);
-        try { Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
-        catch (AtomicMoveNotSupportedException e) { Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING); }
+        try {
+            mapper.writeValue(temp.toFile(), manifest);
+            try { Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE); }
+            catch (FileAlreadyExistsException exists) { /* immutable manifest already present */ }
+            catch (AtomicMoveNotSupportedException e) {
+                try { Files.move(temp, target); } catch (FileAlreadyExistsException exists) { /* already committed */ }
+            }
+        } finally { Files.deleteIfExists(temp); }
     }
     public Manifest load(String id) throws IOException {
-        if (!id.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid manifest id");
+        if (id == null || !id.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid manifest id");
         return mapper.readValue(dir.resolve(id + ".json").toFile(), Manifest.class);
     }
     public List<Manifest> list() throws IOException {
@@ -26,5 +31,13 @@ public final class ManifestIndex {
                 result.add(mapper.readValue(p.toFile(), Manifest.class));
         }
         return result;
+    }
+    public Manifest latest(String filename) throws IOException {
+        return list().stream().filter(m -> Objects.equals(m.filename, filename))
+            .max(Comparator.comparingLong(m -> m.createdAt)).orElse(null);
+    }
+    public List<Manifest> history(String filename) throws IOException {
+        return list().stream().filter(m -> Objects.equals(m.filename, filename))
+            .sorted(Comparator.comparingLong(m -> m.createdAt)).toList();
     }
 }
