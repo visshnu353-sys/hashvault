@@ -1,8 +1,6 @@
 package io.hashvault.chunk;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
 public final class FixedChunker implements Chunker {
     private final int chunkSize;
     public FixedChunker(int chunkSize) {
@@ -10,20 +8,21 @@ public final class FixedChunker implements Chunker {
         this.chunkSize = chunkSize;
     }
     @Override public String name() { return "fixed:" + chunkSize; }
-    @Override public List<byte[]> split(InputStream in) throws IOException {
-        List<byte[]> chunks = new ArrayList<>();
+    @Override public void forEachChunk(InputStream in, ChunkConsumer consumer) throws IOException {
         byte[] buffer = new byte[chunkSize];
-        int n;
-        while ((n = readChunk(in, buffer)) > 0) {
-            byte[] chunk = new byte[n];
-            System.arraycopy(buffer, 0, chunk, 0, n);
-            chunks.add(chunk);
+        while (true) {
+            int total = 0;
+            while (total < buffer.length) {
+                int n = in.read(buffer, total, buffer.length - total);
+                if (n < 0) break;
+                if (n == 0) continue;
+                total += n;
+            }
+            if (total == 0) return;
+            byte[] chunk = new byte[total];
+            System.arraycopy(buffer, 0, chunk, 0, total);
+            consumer.accept(chunk);
+            if (total < buffer.length) return;
         }
-        return chunks;
-    }
-    private static int readChunk(InputStream in, byte[] b) throws IOException {
-        int total = 0, n;
-        while (total < b.length && (n = in.read(b, total, b.length - total)) != -1) total += n;
-        return total;
     }
 }
