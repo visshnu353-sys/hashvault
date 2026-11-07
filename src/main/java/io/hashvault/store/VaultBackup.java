@@ -45,13 +45,18 @@ public final class VaultBackup {
                 Cipher cipher = cipher(Cipher.ENCRYPT_MODE, key, nonce);
                 try (ZipOutputStream zip = new ZipOutputStream(new CipherOutputStream(raw, cipher))) {
                     try (var walk = Files.walk(root)) {
-                        for (Path file : walk.filter(p -> Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS))
+                        for (Path file : walk.filter(p -> !p.equals(root))
                                 .filter(p -> !p.getFileName().toString().equals(".hashvault.lock")).sorted().toList()) {
                             if (Files.isSymbolicLink(file)) continue;
                             String name = root.relativize(file).toString().replace(File.separatorChar, '/');
-                            zip.putNextEntry(new ZipEntry(name));
-                            Files.copy(file, zip);
-                            zip.closeEntry();
+                            if (Files.isDirectory(file, LinkOption.NOFOLLOW_LINKS)) {
+                                zip.putNextEntry(new ZipEntry(name + "/"));
+                                zip.closeEntry();
+                            } else if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+                                zip.putNextEntry(new ZipEntry(name));
+                                Files.copy(file, zip);
+                                zip.closeEntry();
+                            }
                         }
                     }
                 }
