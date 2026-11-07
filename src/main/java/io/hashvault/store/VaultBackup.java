@@ -32,6 +32,7 @@ public final class VaultBackup {
         Path root = vaultRoot.toAbsolutePath().normalize();
         Path target = backupFile.toAbsolutePath().normalize();
         if (!Files.isDirectory(root)) throw new IOException("Vault directory does not exist: " + root);
+        if (target.startsWith(root)) throw new IOException("Backup file must be outside the vault directory");
         Files.createDirectories(target.getParent());
         byte[] salt = new byte[SALT_BYTES], nonce = new byte[NONCE_BYTES];
         RANDOM.nextBytes(salt); RANDOM.nextBytes(nonce);
