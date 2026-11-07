@@ -17,3 +17,5 @@ jobs:
           cache: maven
       - name: Test and package
         run: mvn --batch-mode clean verify
+      - name: Build JMH benchmark runner
+        run: mvn --batch-mode -Pjmh -DskipTests package
