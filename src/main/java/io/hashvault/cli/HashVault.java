@@ -14,6 +14,8 @@ public final class HashVault {
               list <vault>
               history <vault> <filename>
               verify <vault>
+              scan <vault>
+              repair <vault>
               stats <vault>
               cache <vault>
               gc <vault> [--apply]
@@ -59,6 +61,12 @@ public final class HashVault {
                             java.time.Instant.ofEpochMilli(m.createdAt), m.originalSize, m.chunks.size(), m.previousVersionId);
                 }
                 case "verify" -> { engine.verify(); System.out.println("All manifests and objects verified."); }
+                case "scan" -> {
+                    var report = engine.integrityScan();
+                    System.out.println(report);
+                    if (!Boolean.TRUE.equals(report.get("healthy"))) System.exit(2);
+                }
+                case "repair" -> System.out.println(engine.repair());
                 case "recover" -> System.out.println("Startup recovery: " + engine.recoveryReport());
                 case "stats" -> System.out.println(engine.deduplicationReport());
                 case "cache" -> System.out.println(engine.cacheStats());
