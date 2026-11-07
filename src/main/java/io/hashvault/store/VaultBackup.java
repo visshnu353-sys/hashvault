@@ -110,6 +110,8 @@ public final class VaultBackup {
                     }
                     zip.closeEntry();
                 }
+                // Force the authenticated stream to EOF so GCM verifies its final tag.
+                while (zip.read(buffer) != -1) { /* drain authenticated trailing stream */ }
             } catch (IOException e) {
                 throw new IOException("Backup authentication or extraction failed; password may be wrong or backup damaged", e);
             }
