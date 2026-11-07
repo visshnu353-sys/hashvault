@@ -8,7 +8,8 @@ public final class HashVault {
         System.out.println("""
             HashVault - content-addressable storage
             Commands:
-              init <vault>
+              init <vault> [--encrypt]
+              encrypt <vault>
               put <vault> <file> [--chunker=fixed|cdc] [--chunk-size=BYTES] [--threads=N] [--compression=auto|gzip|none]
               get <vault> <manifest-id> <output-file>
               list <vault>
@@ -27,12 +28,20 @@ public final class HashVault {
             String command = args[0];
             if (command.equals("init")) {
                 if (args.length < 2) { usage(); return; }
-                new HashVaultEngine(Path.of(args[1]));
-                System.out.println("Initialized vault at " + Path.of(args[1]).toAbsolutePath()); return;
+                HashVaultEngine created = new HashVaultEngine(Path.of(args[1]));
+                if (java.util.Arrays.asList(args).contains("--encrypt")) {
+                    created.enableEncryption(passwordFromEnvironment());
+                    System.out.println("Vault initialized with AES-256-GCM object encryption.");
+                } else System.out.println("Initialized vault at " + Path.of(args[1]).toAbsolutePath());
+                return;
             }
             if (args.length < 2) { usage(); return; }
             HashVaultEngine engine = new HashVaultEngine(Path.of(args[1]));
             switch (command) {
+                case "encrypt" -> {
+                    engine.enableEncryption(passwordFromEnvironment());
+                    System.out.println("Vault objects encrypted with AES-256-GCM.");
+                }
                 case "put" -> {
                     if (args.length < 3) { usage(); return; }
                     String mode = option(args, "--chunker=", "fixed");
@@ -77,6 +86,12 @@ public final class HashVault {
                 default -> usage();
             }
         } catch (Exception e) { System.err.println("HashVault error: " + e.getMessage()); System.exit(1); }
+    }
+    private static char[] passwordFromEnvironment() {
+        String password = System.getenv("HASHVAULT_PASSWORD");
+        if (password == null || password.isEmpty())
+            throw new IllegalArgumentException("Set HASHVAULT_PASSWORD; passwords are never accepted as command-line arguments.");
+        return password.toCharArray();
     }
     private static String option(String[] args, String prefix, String fallback) {
         for (String arg : args) if (arg.startsWith(prefix)) return arg.substring(prefix.length());
