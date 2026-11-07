@@ -9,12 +9,12 @@ public final class HashVault {
             HashVault - content-addressable storage
             Commands:
               init <vault>
-              put <vault> <file> [--chunker=fixed|cdc] [--chunk-size=BYTES] [--threads=N]
+              put <vault> <file> [--chunker=fixed|cdc] [--chunk-size=BYTES] [--threads=N] [--compression=auto|gzip|none]
               get <vault> <manifest-id> <output-file>
               list <vault>
               history <vault> <filename>
               verify <vault>
-              stats <vault>
+              stats <vault>\n              cache <vault>
               gc <vault> [--apply]
             """);
     }
@@ -32,7 +32,7 @@ public final class HashVault {
             switch (command) {
                 case "put" -> {
                     if (args.length < 3) { usage(); return; }
-                    String mode = option(args, "--chunker=", "fixed");
+                    String mode = option(args, "--chunker=", "fixed");\n                    engine.configureCompression(io.hashvault.store.CompressionCodec.parse(option(args, "--compression=", "auto")));
                     int size = Integer.parseInt(option(args, "--chunk-size=", "1048576"));
                     int threads = Integer.parseInt(option(args, "--threads=", Integer.toString(Runtime.getRuntime().availableProcessors())));
                     Chunker chunker = mode.equalsIgnoreCase("cdc")
@@ -58,7 +58,7 @@ public final class HashVault {
                 }
                 case "verify" -> { engine.verify(); System.out.println("All manifests and objects verified."); }
                 case "recover" -> System.out.println("Startup recovery: " + engine.recoveryReport());
-                case "stats" -> System.out.println(engine.deduplicationReport());
+                case "stats" -> System.out.println(engine.deduplicationReport());\n                case "cache" -> System.out.println(engine.cacheStats());
                 case "gc" -> {
                     boolean apply = java.util.Arrays.asList(args).contains("--apply");
                     System.out.println(engine.garbageCollect(!apply));
