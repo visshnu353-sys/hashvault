@@ -113,4 +113,52 @@ class VaultSecurityTest {
         java.util.Arrays.fill(key, (byte) 0);
     }
 
+
+    @Test void encryptsManifestMetadataAndDetectsTampering() throws Exception {
+        Path vault = temp.resolve("manifest-encryption");
+        Path source = temp.resolve("private-name-report.txt");
+        Files.writeString(source, "manifest payload");
+        io.hashvault.store.HashVaultEngine engine = new io.hashvault.store.HashVaultEngine(vault);
+        var manifest = engine.put(source, new io.hashvault.chunk.FixedChunker(8), 1);
+        Path metadata = vault.resolve("manifests").resolve(manifest.id + ".json");
+        assertTrue(Files.readString(metadata).contains("private-name-report.txt"));
+
+        engine.enableEncryption("manifest secret password".toCharArray());
+        byte[] encrypted = Files.readAllBytes(metadata);
+        assertEquals(0x48, encrypted[0] & 0xff);
+        assertEquals(0x56, encrypted[1] & 0xff);
+        assertFalse(new String(encrypted, java.nio.charset.StandardCharsets.ISO_8859_1)
+            .contains("private-name-report.txt"));
+        assertEquals(manifest.id, engine.list().get(0).id);
+
+        byte[] key = new VaultCrypto(vault).unlock("manifest secret password".toCharArray());
+        encrypted[encrypted.length - 1] ^= 1;
+        Files.write(metadata, encrypted);
+        io.hashvault.index.ManifestIndex index = new io.hashvault.index.ManifestIndex(vault, key);
+        assertFalse(index.scan().get(0).valid());
+        java.util.Arrays.fill(key, (byte) 0);
+    }
+
+    @Test void encryptedManifestIndexCanReadLegacyPlaintextDuringMigration() throws Exception {
+        Path vault = temp.resolve("manifest-compatibility");
+        Files.createDirectories(vault.resolve("manifests"));
+        io.hashvault.index.Manifest manifest = new io.hashvault.index.Manifest();
+        manifest.filename = "legacy.txt";
+        manifest.originalSize = 0;
+        manifest.chunker = "fixed";
+        manifest.createdAt = 1;
+        manifest.chunks = new java.util.ArrayList<>();
+        manifest.id = manifest.identity();
+        io.hashvault.index.ManifestIndex plain = new io.hashvault.index.ManifestIndex(vault);
+        plain.save(manifest);
+        byte[] key = new byte[32];
+        java.util.Arrays.fill(key, (byte) 9);
+        io.hashvault.index.ManifestIndex encrypted = new io.hashvault.index.ManifestIndex(vault, key);
+        assertEquals(manifest.id, encrypted.load(manifest.id).id);
+        encrypted.encryptExistingManifests();
+        assertFalse(new String(Files.readAllBytes(vault.resolve("manifests").resolve(manifest.id + ".json")),
+            java.nio.charset.StandardCharsets.ISO_8859_1).contains("legacy.txt"));
+        assertEquals(manifest.id, encrypted.load(manifest.id).id);
+    }
+
 }
