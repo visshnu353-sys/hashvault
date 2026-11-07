@@ -18,6 +18,12 @@ public final class HashVaultEngine {
         this.root = root.toAbsolutePath().normalize();
         Files.createDirectories(this.root);
         objects = new ObjectStore(this.root);
+        VaultCrypto crypto = new VaultCrypto(this.root);
+        if (crypto.isEnabled()) {
+            char[] password = passwordFromEnvironment();
+            try { objects.setEncryptionKey(crypto.unlock(password)); }
+            finally { java.util.Arrays.fill(password, '\\0'); }
+        }
         index = new ManifestIndex(this.root);
         journal = new TransactionLog(this.root);
         try (VaultLock ignored = VaultLock.acquire(this.root)) {
@@ -29,6 +35,30 @@ public final class HashVaultEngine {
 
     public void configureCompression(CompressionCodec codec) { objects.setCompression(codec); }
     public Map<String, Long> cacheStats() { return objects.cacheStats(); }
+    public boolean encryptionEnabled() { return objects.encryptionEnabled(); }
+
+    /** Enables encryption for the vault and rewrites all existing objects in place. */
+    public void enableEncryption(char[] password) throws IOException {
+        try (VaultLock ignored = VaultLock.acquire(root)) {
+            VaultCrypto crypto = new VaultCrypto(root);
+            byte[] key = crypto.initialize(password);
+            try {
+                objects.setEncryptionKey(key);
+                objects.encryptExistingObjects();
+            } finally {
+                java.util.Arrays.fill(key, (byte) 0);
+            }
+        } finally {
+            if (password != null) java.util.Arrays.fill(password, '\\0');
+        }
+    }
+
+    private static char[] passwordFromEnvironment() throws IOException {
+        String value = System.getenv("HASHVAULT_PASSWORD");
+        if (value == null || value.isEmpty())
+            throw new IOException("This vault is encrypted. Set HASHVAULT_PASSWORD before running HashVault.");
+        return value.toCharArray();
+    }
 
     public Manifest put(Path source, Chunker chunker) throws IOException {
         return put(source, chunker, Math.max(1, Runtime.getRuntime().availableProcessors()));
