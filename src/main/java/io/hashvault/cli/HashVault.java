@@ -56,7 +56,8 @@ public final class HashVault {
                         System.out.printf("%s  %s  %d bytes  %d chunks  parent=%s%n", m.id,
                             java.time.Instant.ofEpochMilli(m.createdAt), m.originalSize, m.chunks.size(), m.previousVersionId);
                 }
-                case "verify" -> { engine.verify(); System.out.println("All manifests and objects verified."); }\n                case "recover" -> System.out.println("Startup recovery: " + engine.recoveryReport());
+                case "verify" -> { engine.verify(); System.out.println("All manifests and objects verified."); }
+                case "recover" -> System.out.println("Startup recovery: " + engine.recoveryReport());
                 case "stats" -> System.out.println(engine.deduplicationReport());
                 case "gc" -> {
                     boolean apply = java.util.Arrays.asList(args).contains("--apply");
