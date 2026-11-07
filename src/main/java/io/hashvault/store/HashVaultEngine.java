@@ -22,7 +22,7 @@ public final class HashVaultEngine {
         if (crypto.isEnabled()) {
             char[] password = passwordFromEnvironment();
             try { objects.setEncryptionKey(crypto.unlock(password)); }
-            finally { java.util.Arrays.fill(password, '\\0'); }
+            finally { java.util.Arrays.fill(password, (char) 0); }
         }
         index = new ManifestIndex(this.root);
         journal = new TransactionLog(this.root);
@@ -49,7 +49,7 @@ public final class HashVaultEngine {
                 java.util.Arrays.fill(key, (byte) 0);
             }
         } finally {
-            if (password != null) java.util.Arrays.fill(password, '\\0');
+            if (password != null) java.util.Arrays.fill(password, (char) 0);
         }
     }
 
