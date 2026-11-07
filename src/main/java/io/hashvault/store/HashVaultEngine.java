@@ -193,7 +193,7 @@ public final class HashVaultEngine {
                 if (!checked.add(chunk.hash)) continue;
                 checkedObjects++;
                 try {
-                    byte[] bytes = objects.get(chunk.hash);
+                    byte[] bytes = objects.verifyAndGet(chunk.hash);
                     if (bytes.length != chunk.size) {
                         issues.add(Map.of("manifest", entry.fileName(), "object", chunk.hash,
                             "error", "chunk length mismatch: expected " + chunk.size + ", got " + bytes.length));
