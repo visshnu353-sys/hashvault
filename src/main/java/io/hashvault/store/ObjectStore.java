@@ -58,6 +58,17 @@ public final class ObjectStore {
         if (hash == null || !hash.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid SHA-256 object id");
         byte[] cached = cache.get(hash);
         if (cached != null) return cached;
+        return readAndValidate(hash);
+    }
+
+    /** Bypasses the cache so an audit always checks bytes currently persisted on disk. */
+    public byte[] verifyAndGet(String hash) throws IOException {
+        if (hash == null || !hash.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid SHA-256 object id");
+        cache.invalidate(hash);
+        return readAndValidate(hash);
+    }
+
+    private byte[] readAndValidate(String hash) throws IOException {
         try (DataInputStream in = new DataInputStream(new BufferedInputStream(Files.newInputStream(pathFor(hash))))) {
             if (in.readInt() != MAGIC) throw new IOException("Invalid object header: " + hash);
             byte codec = in.readByte(); int length = in.readInt();
