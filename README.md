@@ -24,9 +24,9 @@ Java 17 content-addressable storage with SHA-256 object identity, deduplication,
 
 ## Benchmark
 Build first, then run:
-    java -cp target/classes:target/dependency/* io.hashvault.benchmark.HashVaultBenchmark 128 ./benchmark-work
+    mvn exec:java -Dexec.mainClass=io.hashvault.benchmark.HashVaultBenchmark -Dexec.args="128 ./benchmark-work"
 
-The benchmark generates deterministic random input (default 128 MiB) and writes results into separate fixed and CDC vault directories. On Windows, use semicolons instead of colons in the classpath. To make the benchmark directly runnable without dependency setup, use Maven exec plugin or run it from an IDE with the Maven classpath.
+The benchmark generates deterministic random input (default 128 MiB) and writes results into separate fixed and CDC vault directories. The Maven exec plugin supplies the project dependency classpath.
 
 ## Storage format
 Objects live at objects/<first-two-hash-characters>/<sha256>.blob. The object hash is calculated over uncompressed bytes. Each object has a magic header, codec id, original length, and raw or GZIP payload. Manifests preserve ordered hashes and lengths.
