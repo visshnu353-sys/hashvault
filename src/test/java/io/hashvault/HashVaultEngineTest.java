@@ -84,4 +84,35 @@ class HashVaultEngineTest {
         assertEquals(1, applied.get("deletedObjects"));
         engine.verify();
     }
+
+    @Test void detectsManifestChecksumCorruption() throws Exception {
+        Path input = temp.resolve("integrity.txt");
+        Path vault = temp.resolve("integrity-vault");
+        Files.writeString(input, "checksum protected metadata");
+        HashVaultEngine engine = new HashVaultEngine(vault);
+        var manifest = engine.put(input, new FixedChunker(8), 1);
+        Path metadata = vault.resolve("manifests").resolve(manifest.id + ".json");
+        String json = Files.readString(metadata);
+        assertNotNull(manifest.checksum);
+        Files.writeString(metadata, json.replace(manifest.checksum, "0".repeat(64)));
+        var report = engine.integrityScan();
+        assertFalse((Boolean) report.get("healthy"));
+        assertTrue((Integer) report.get("issuesFound") > 0);
+    }
+
+    @Test void acceptsLegacyManifestWithoutVersionOrChecksum() throws Exception {
+        Path input = temp.resolve("legacy.txt");
+        Path vault = temp.resolve("legacy-vault");
+        Files.writeString(input, "legacy snapshot remains readable");
+        HashVaultEngine engine = new HashVaultEngine(vault);
+        var manifest = engine.put(input, new FixedChunker(7), 1);
+        Path metadata = vault.resolve("manifests").resolve(manifest.id + ".json");
+        String json = Files.readString(metadata);
+        json = json.replaceAll("(?m)^\\s*\"formatVersion\"\\s*:\\s*\\d+,?\\s*\\n", "");
+        json = json.replaceAll("(?m)^\\s*\"checksum\"\\s*:\\s*\"[^\"]*\",?\\s*\\n", "");
+        Files.writeString(metadata, json);
+        var report = new HashVaultEngine(vault).integrityScan();
+        assertTrue((Boolean) report.get("healthy"), report.toString());
+    }
+
 }
