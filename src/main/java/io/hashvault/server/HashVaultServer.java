@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** Small authenticated HTTP interface. Use a TLS reverse proxy for non-loopback deployments. */
@@ -24,6 +25,7 @@ public final class HashVaultServer implements AutoCloseable {
     private final HttpServer server;
     private final HashVaultEngine engine;
     private final byte[] token;
+    private final ExecutorService executor;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public HashVaultServer(HashVaultEngine engine, InetSocketAddress address, String bearerToken) throws IOException {
@@ -33,7 +35,8 @@ public final class HashVaultServer implements AutoCloseable {
         this.token = bearerToken.getBytes(StandardCharsets.UTF_8);
         server = HttpServer.create(address, 64);
         server.createContext("/", this::handle);
-        server.setExecutor(Executors.newFixedThreadPool(Math.max(2, Runtime.getRuntime().availableProcessors())));
+        executor = Executors.newFixedThreadPool(Math.max(2, Runtime.getRuntime().availableProcessors()));
+        server.setExecutor(executor);
     }
 
     public void start() { server.start(); }
@@ -149,5 +152,5 @@ public final class HashVaultServer implements AutoCloseable {
         try (OutputStream out = exchange.getResponseBody()) { out.write(bytes); }
     }
 
-    @Override public void close() { server.stop(1); }
+    @Override public void close() { server.stop(1); executor.shutdownNow(); }
 }
