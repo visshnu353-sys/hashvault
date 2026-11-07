@@ -27,10 +27,13 @@ The shaded runnable CLI is created at target/hashvault-1.0.0.jar.
 
 ## CLI
     java -jar target/hashvault-1.0.0.jar init ./vault
-    HASHVAULT_PASSWORD='use-a-long-secret-phrase' java -jar target/hashvault-1.0.0.jar init ./secure-vault --encrypt
-    HASHVAULT_PASSWORD='use-a-long-secret-phrase' java -jar target/hashvault-1.0.0.jar encrypt ./existing-vault
-    HASHVAULT_PASSWORD='use-a-long-secret-phrase' java -jar target/hashvault-1.0.0.jar backup ./secure-vault ./secure-vault.hvb
-    HASHVAULT_PASSWORD='use-a-long-secret-phrase' java -jar target/hashvault-1.0.0.jar restore ./secure-vault.hvb ./restored-vault
+    read -s HASHVAULT_PASSWORD
+    export HASHVAULT_PASSWORD
+    java -jar target/hashvault-1.0.0.jar init ./secure-vault --encrypt
+    java -jar target/hashvault-1.0.0.jar encrypt ./existing-vault
+    java -jar target/hashvault-1.0.0.jar backup ./secure-vault ./secure-vault.hvb
+    java -jar target/hashvault-1.0.0.jar restore ./secure-vault.hvb ./restored-vault
+    unset HASHVAULT_PASSWORD
     java -jar target/hashvault-1.0.0.jar put ./vault ./file.bin
     java -jar target/hashvault-1.0.0.jar put ./vault ./file.bin --chunker=cdc --threads=4 --compression=auto
     java -jar target/hashvault-1.0.0.jar put ./vault ./file.bin --compression=gzip
