@@ -11,6 +11,8 @@ Java 17 content-addressable storage with SHA-256 object identity, deduplication,
 - Immutable manifests with file version history.
 - Restore any historical manifest.
 - Deduplication/storage report and safe garbage collection.
+- Durable write-ahead log with startup recovery of incomplete transactions.
+- OS-backed exclusive vault lock for mutation and garbage collection.
 - JUnit tests and GitHub Actions CI.
 
 ## Build
@@ -29,6 +31,7 @@ The shaded runnable CLI is created at target/hashvault-1.0.0.jar.
     java -jar target/hashvault-1.0.0.jar list ./vault
     java -jar target/hashvault-1.0.0.jar history ./vault file.bin
     java -jar target/hashvault-1.0.0.jar verify ./vault
+    java -jar target/hashvault-1.0.0.jar recover ./vault
     java -jar target/hashvault-1.0.0.jar stats ./vault
     java -jar target/hashvault-1.0.0.jar cache ./vault
     java -jar target/hashvault-1.0.0.jar gc ./vault
@@ -59,6 +62,6 @@ Object hashes are calculated over uncompressed bytes. Each object has a magic he
 A file is versioned by its basename within a vault. A changed import creates a new immutable manifest pointing to the previous version. Importing unchanged bytes with the same chunker returns the existing version. Use history to list snapshots and get with any manifest id to restore one.
 
 ## Safety and limitations
-Objects are written to temporary files and published atomically where supported. Manifests are saved after all chunk writes complete; a crash between object writes and manifest publication can leave unreferenced objects, which dry-run/actual GC can identify and remove.
+Objects are written to temporary files and published atomically where supported. A durable append-only WAL records BEGIN, PREPARE, COMMIT and ABORT transitions. On startup, recovery completes a prepared transaction when its immutable manifest exists, or records an abort when publication did not complete. A crash after object publication but before manifest publication can still leave unreferenced objects; garbage collection can identify these.
 
-This is a local single-process-oriented prototype, not yet a fully transactional multi-process database. Concurrent imports to the same filename are not serialized into a guaranteed linear version chain. There is no encryption, remote replication, object lease system, or journal-based crash recovery yet. Run verify after storage maintenance and keep independent backups of important vault data.
+Mutations and garbage collection acquire an OS-backed exclusive lock file (`.hashvault.lock`), preventing simultaneous HashVault writers from changing the same vault. This is local-filesystem coordination, not distributed locking; all writers must use HashVault. Reads use immutable manifests and content-addressed objects. There is no encryption, remote replication or cross-host coordination. Run verify after storage maintenance and keep independent backups of important vault data.
