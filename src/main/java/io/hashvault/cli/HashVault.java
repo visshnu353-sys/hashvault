@@ -3,6 +3,8 @@ import io.hashvault.chunk.*;
 import io.hashvault.index.Manifest;
 import io.hashvault.store.HashVaultEngine;
 import io.hashvault.store.VaultBackup;
+import io.hashvault.server.HashVaultServer;
+import java.net.InetSocketAddress;
 import java.nio.file.Path;
 public final class HashVault {
     private static void usage() {
@@ -13,6 +15,7 @@ public final class HashVault {
               encrypt <vault>
               backup <vault> <backup.hvb>
               restore <backup.hvb> <new-vault-directory>
+              serve <vault> [--host=127.0.0.1] [--port=8787]
               put <vault> <file> [--chunker=fixed|cdc] [--chunk-size=BYTES] [--threads=N] [--compression=auto|gzip|none]
               get <vault> <manifest-id> <output-file>
               list <vault>
@@ -47,6 +50,19 @@ public final class HashVault {
             if (args.length < 2) { usage(); return; }
             HashVaultEngine engine = new HashVaultEngine(Path.of(args[1]));
             switch (command) {
+                case "serve" -> {
+                    String host = option(args, "--host=", "127.0.0.1");
+                    int port = Integer.parseInt(option(args, "--port=", "8787"));
+                    String token = System.getenv("HASHVAULT_API_TOKEN");
+                    try (HashVaultServer server = new HashVaultServer(engine, new InetSocketAddress(host, port), token)) {
+                        server.start();
+                        System.out.println("HashVault API listening at http://" + server.address().getHostString()
+                            + ":" + server.address().getPort() + " (health endpoint is public; /v1 requires bearer auth)");
+                        if (!java.net.InetAddress.getByName(host).isLoopbackAddress())
+                            System.out.println("WARNING: non-loopback binding. Put this behind HTTPS/TLS before exposing it to a network.");
+                        new java.util.concurrent.CountDownLatch(1).await();
+                    }
+                }
                 case "encrypt" -> {
                     engine.enableEncryption(passwordFromEnvironment());
                     System.out.println("Vault objects encrypted with AES-256-GCM.");
