@@ -1,42 +1,35 @@
 # HashVault
+Java 17 content-addressable storage with SHA-256 object identity, deduplication, compression, manifests, fixed-size and content-defined chunking.
 
-A Java 17 content-addressable storage engine. Files are chunked, SHA-256 addressed, compressed when beneficial, deduplicated across imports, indexed by manifests, and reconstructed on demand.
-
-## Features
-- Fixed-size and content-defined chunking (rolling hash boundary detector)
-- SHA-256 object identity and cross-file deduplication
-- GZIP compression when it saves space
-- JSON manifests as the persistent reconstruction index
-- put, get, list, verify, and stats CLI commands
-- JUnit 5 tests
-
-## Requirements
-- JDK 17+
-- Maven 3.9+
+## Phase 2 improvements
+- Streaming chunk consumer: ingestion retains at most one chunk rather than a list of all chunks.
+- Buffered input/output for file operations.
+- Temporary object files and atomic publication to avoid exposing incomplete objects to readers.
+- Gear-hash CDC with configurable minimum, average and maximum chunk sizes.
+- Benchmark harness comparing fixed and CDC chunking.
+- Tests for empty files, larger inputs, round trips and deduplication.
 
 ## Build
     mvn test
     mvn package
 
-## Usage
+## CLI
     java -jar target/hashvault-1.0.0.jar init ./vault
-    java -jar target/hashvault-1.0.0.jar put ./vault ./sample.bin
-    java -jar target/hashvault-1.0.0.jar list ./vault
+    java -jar target/hashvault-1.0.0.jar put ./vault ./file.bin
+    java -jar target/hashvault-1.0.0.jar put ./vault ./file.bin --chunker=cdc
     java -jar target/hashvault-1.0.0.jar get ./vault MANIFEST_ID ./restored.bin
+    java -jar target/hashvault-1.0.0.jar list ./vault
     java -jar target/hashvault-1.0.0.jar verify ./vault
     java -jar target/hashvault-1.0.0.jar stats ./vault
 
-Select a chunker with --chunker=fixed or --chunker=cdc, and set fixed size with --chunk-size=1048576.
+## Benchmark
+Build first, then run:
+    java -cp target/classes:target/dependency/* io.hashvault.benchmark.HashVaultBenchmark 128 ./benchmark-work
 
-## On-disk layout
-    vault/
-      objects/ab/<sha256>.blob
-      manifests/<manifest-id>.json
+The benchmark generates deterministic random input (default 128 MiB) and writes results into separate fixed and CDC vault directories. On Windows, use semicolons instead of colons in the classpath. To make the benchmark directly runnable without dependency setup, use Maven exec plugin or run it from an IDE with the Maven classpath.
 
-Objects are immutable. A manifest stores the original filename, byte length, chunker configuration, and ordered object hashes and lengths. Repeated content reuses existing objects.
+## Storage format
+Objects live at objects/<first-two-hash-characters>/<sha256>.blob. The object hash is calculated over uncompressed bytes. Each object has a magic header, codec id, original length, and raw or GZIP payload. Manifests preserve ordered hashes and lengths.
 
-## Design notes
-- Object keys are SHA-256 of the uncompressed chunk bytes. Compression does not affect identity.
-- Each object has a binary header followed by its payload. Reads validate decompression length and SHA-256.
-- Manifests are written through a temporary file and atomic move where supported.
-- This is a local single-writer prototype. Concurrent writers, garbage collection, encryption, crash-recovery journaling, and remote replication are future phases.
+## Limitations
+This remains a local prototype. It does not yet include a transactional journal, multi-process locking guarantees across all filesystems, garbage collection, encryption, remote replication, or crash-safe manifest/object transactions.
