@@ -77,10 +77,7 @@ public final class HashVaultEngine {
                     return previous;
                 }
             }
-            StringBuilder identity = new StringBuilder(m.filename).append(':').append(m.originalSize).append(':')
-                .append(m.chunker).append(':').append(m.previousVersionId);
-            for (Manifest.ChunkRef c : m.chunks) identity.append(':').append(c.hash).append(':').append(c.size);
-            m.id = ObjectStore.sha256(identity.toString().getBytes(StandardCharsets.UTF_8));
+            m.id = m.identity();
             journal.prepare(tx, m.id);
             index.save(m);
             journal.commit(tx);
@@ -175,7 +172,69 @@ public final class HashVaultEngine {
         }
     }
 
+    /**
+     * Full read-through audit. Reports each damaged manifest/object instead of
+     * stopping at the first failure. A successful scan validates SHA-256 bytes,
+     * chunk lengths, manifest identity, and versioned metadata checksums.
+     */
+    public Map<String, Object> integrityScan() throws IOException {
+        List<Map<String, String>> issues = new ArrayList<>();
+        int validManifests = 0;
+        int checkedObjects = 0;
+        Set<String> checked = new HashSet<>();
+        for (ManifestIndex.ScanEntry entry : index.scan()) {
+            if (!entry.valid()) {
+                issues.add(Map.of("manifest", entry.fileName(), "error", entry.error()));
+                continue;
+            }
+            Manifest manifest = entry.manifest();
+            validManifests++;
+            for (Manifest.ChunkRef chunk : manifest.chunks) {
+                if (!checked.add(chunk.hash)) continue;
+                checkedObjects++;
+                try {
+                    byte[] bytes = objects.get(chunk.hash);
+                    if (bytes.length != chunk.size) {
+                        issues.add(Map.of("manifest", entry.fileName(), "object", chunk.hash,
+                            "error", "chunk length mismatch: expected " + chunk.size + ", got " + bytes.length));
+                    }
+                } catch (Exception e) {
+                    issues.add(Map.of("manifest", entry.fileName(), "object", chunk.hash,
+                        "error", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+                }
+            }
+        }
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("manifestsScanned", index.scan().size());
+        report.put("validManifests", validManifests);
+        report.put("uniqueObjectsChecked", checkedObjects);
+        report.put("issuesFound", issues.size());
+        report.put("issues", issues);
+        report.put("healthy", issues.isEmpty());
+        return report;
+    }
+
+    /**
+     * Conservative repair: replay the WAL and then run a full audit. It never
+     * fabricates object bytes or deletes damaged metadata; unrecoverable content
+     * is reported for restoration from an independent backup.
+     */
+    public Map<String, Object> repair() throws IOException {
+        Map<String, Integer> recovered;
+        try (VaultLock ignored = VaultLock.acquire(root)) {
+            recovered = journal.recover(index::exists);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("walRecovery", recovered);
+        result.put("integrity", integrityScan());
+        result.put("automaticDataRewrites", 0);
+        return result;
+    }
+
     public void verify() throws IOException {
+        Map<String, Object> report = integrityScan();
+        if (!Boolean.TRUE.equals(report.get("healthy")))
+            throw new IOException("Integrity scan found " + report.get("issuesFound") + " issue(s): " + report.get("issues"));
         for (Manifest m : index.list()) {
             long total = 0;
             for (Manifest.ChunkRef c : m.chunks) {
