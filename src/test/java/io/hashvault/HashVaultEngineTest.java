@@ -115,4 +115,20 @@ class HashVaultEngineTest {
         assertTrue((Boolean) report.get("healthy"), report.toString());
     }
 
+
+    @Test void scanDetectsOnDiskObjectCorruptionDespiteWarmCache() throws Exception {
+        Path input = temp.resolve("object-corrupt.txt");
+        Path vault = temp.resolve("object-corrupt-vault");
+        Files.writeString(input, "persisted bytes must be checked, not cached bytes");
+        HashVaultEngine engine = new HashVaultEngine(vault);
+        var manifest = engine.put(input, new FixedChunker(64), 1);
+        String hash = manifest.chunks.get(0).hash;
+        Path object = vault.resolve("objects").resolve(hash.substring(0, 2)).resolve(hash + ".blob");
+        byte[] stored = Files.readAllBytes(object);
+        stored[stored.length - 1] ^= 0x01;
+        Files.write(object, stored);
+        var report = engine.integrityScan();
+        assertFalse((Boolean) report.get("healthy"), report.toString());
+    }
+
 }
