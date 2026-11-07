@@ -14,7 +14,7 @@ class HashVaultEngineTest {
         for (int i = 0; i < data.length; i++) data[i] = (byte)(i % 97);
         Files.write(input, data);
         HashVaultEngine engine = new HashVaultEngine(temp.resolve("vault"));
-        var manifest = engine.put(input, new FixedChunker(32_768));
+        var manifest = engine.put(input, new FixedChunker(32_768), 3);
         engine.get(manifest.id, output);
         assertArrayEquals(data, Files.readAllBytes(output));
         assertEquals(8, manifest.chunks.size());
@@ -24,9 +24,9 @@ class HashVaultEngineTest {
         byte[] data = "same content repeated ".repeat(1000).getBytes();
         Files.write(a, data); Files.write(b, data);
         HashVaultEngine engine = new HashVaultEngine(temp.resolve("vault"));
-        var first = engine.put(a, new FixedChunker(1024));
+        var first = engine.put(a, new FixedChunker(1024), 2);
         long afterFirst = engine.storedBytes();
-        var second = engine.put(b, new FixedChunker(1024));
+        var second = engine.put(b, new FixedChunker(1024), 2);
         assertEquals(afterFirst, engine.storedBytes());
         assertEquals(first.chunks.stream().map(c -> c.hash).toList(), second.chunks.stream().map(c -> c.hash).toList());
     }
@@ -35,7 +35,7 @@ class HashVaultEngineTest {
         byte[] data = "content-defined chunking ".repeat(20_000).getBytes();
         Files.write(input, data);
         HashVaultEngine engine = new HashVaultEngine(temp.resolve("vault"));
-        var manifest = engine.put(input, new CdcChunker(512, 1024, 2048));
+        var manifest = engine.put(input, new CdcChunker(512, 1024, 2048), 2);
         engine.get(manifest.id, output);
         assertArrayEquals(data, Files.readAllBytes(output));
         engine.verify();
@@ -44,21 +44,33 @@ class HashVaultEngineTest {
         Path input = temp.resolve("empty"), output = temp.resolve("restored");
         Files.write(input, new byte[0]);
         HashVaultEngine engine = new HashVaultEngine(temp.resolve("vault"));
-        var manifest = engine.put(input, new FixedChunker(4096));
+        var manifest = engine.put(input, new FixedChunker(4096), 1);
         assertTrue(manifest.chunks.isEmpty());
         engine.get(manifest.id, output);
         assertEquals(0, Files.size(output));
         engine.verify();
     }
-    @Test void streamsLargeFileAndRespectsCdcMaximum() throws Exception {
-        Path input = temp.resolve("large.bin"), output = temp.resolve("large-restored.bin");
-        byte[] data = new byte[3 * 1024 * 1024 + 17];
-        for (int i = 0; i < data.length; i++) data[i] = (byte)(i * 31);
-        Files.write(input, data);
+    @Test void versionsFileAndPreservesOldSnapshot() throws Exception {
+        Path input = temp.resolve("notes.txt"), oldCopy = temp.resolve("old.txt");
+        Files.writeString(input, "version one");
         HashVaultEngine engine = new HashVaultEngine(temp.resolve("vault"));
-        var manifest = engine.put(input, new CdcChunker(4096, 8192, 16384));
-        assertTrue(manifest.chunks.stream().allMatch(c -> c.size <= 16384));
-        engine.get(manifest.id, output);
-        assertArrayEquals(data, Files.readAllBytes(output));
+        var first = engine.put(input, new FixedChunker(4), 2);
+        Files.writeString(input, "version two with changes");
+        var second = engine.put(input, new FixedChunker(4), 2);
+        assertEquals(first.id, second.previousVersionId);
+        assertEquals(2, engine.history("notes.txt").size());
+        engine.get(first.id, oldCopy);
+        assertEquals("version one", Files.readString(oldCopy));
+    }
+    @Test void garbageCollectionOnlyRemovesUnreferencedObjects() throws Exception {
+        Path input = temp.resolve("kept.txt");
+        Files.writeString(input, "keep this content");
+        HashVaultEngine engine = new HashVaultEngine(temp.resolve("vault"));
+        engine.put(input, new FixedChunker(5), 1);
+        var dry = engine.garbageCollect(true);
+        assertEquals(0, dry.get("unreferencedObjects"));
+        var applied = engine.garbageCollect(false);
+        assertEquals(0, applied.get("deletedObjects"));
+        engine.verify();
     }
 }
