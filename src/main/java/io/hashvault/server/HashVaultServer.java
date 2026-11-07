@@ -41,6 +41,7 @@ public final class HashVaultServer implements AutoCloseable {
 
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
+            try {
             String path = exchange.getRequestURI().getPath();
             if ("GET".equals(exchange.getRequestMethod()) && "/health".equals(path)) {
                 sendJson(exchange, 200, Map.of("status", "ok", "service", "HashVault"));
@@ -90,10 +91,11 @@ public final class HashVaultServer implements AutoCloseable {
                 return;
             }
             sendJson(exchange, 404, Map.of("error", "not found"));
-        } catch (IllegalArgumentException e) {
-            sendJson(exchange, 400, Map.of("error", e.getMessage()));
-        } catch (Exception e) {
-            sendJson(exchange, 500, Map.of("error", e.getMessage() == null ? "internal error" : e.getMessage()));
+            } catch (IllegalArgumentException e) {
+                sendJson(exchange, 400, Map.of("error", e.getMessage()));
+            } catch (Exception e) {
+                sendJson(exchange, 500, Map.of("error", e.getMessage() == null ? "internal error" : e.getMessage()));
+            }
         }
     }
 
