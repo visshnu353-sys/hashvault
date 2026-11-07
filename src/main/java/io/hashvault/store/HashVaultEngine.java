@@ -25,7 +25,7 @@ public final class HashVaultEngine {
         }
     }
 
-    public Map<String, Integer> recoveryReport() { return Collections.unmodifiableMap(recoveryReport); }
+    public Map<String, Integer> recoveryReport() { return Collections.unmodifiableMap(recoveryReport); }\n\n    public void configureCompression(CompressionCodec codec) { objects.setCompression(codec); }\n    public Map<String, Long> cacheStats() { return objects.cacheStats(); }
 
     public Manifest put(Path source, Chunker chunker) throws IOException {
         return put(source, chunker, Math.max(1, Runtime.getRuntime().availableProcessors()));
@@ -146,7 +146,7 @@ public final class HashVaultEngine {
         report.put("uniqueObjects", unique.size());
         report.put("storedObjectBytes", stored);
         report.put("logicalMinusStoredBytes", Math.max(0, logical - stored));
-        report.put("logicalToStoredRatio", stored == 0 ? 1.0 : (double) logical / stored);
+        report.put("logicalToStoredRatio", stored == 0 ? 1.0 : (double) logical / stored);\n        report.put("cache", objects.cacheStats());
         return report;
     }
 
