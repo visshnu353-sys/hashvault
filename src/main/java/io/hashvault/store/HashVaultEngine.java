@@ -39,6 +39,15 @@ public final class HashVaultEngine {
             for (Future<?> f : pending) f.cancel(true);
             throw e;
         } finally { pool.shutdownNow(); }
+        if (previous != null && previous.originalSize == m.originalSize
+                && previous.chunker.equals(m.chunker)
+                && previous.chunks.size() == m.chunks.size()) {
+            boolean unchanged = true;
+            for (int i = 0; i < m.chunks.size(); i++) {
+                if (!previous.chunks.get(i).hash.equals(m.chunks.get(i).hash)) { unchanged = false; break; }
+            }
+            if (unchanged) return previous;
+        }
         StringBuilder identity = new StringBuilder(m.filename).append(':').append(m.originalSize).append(':')
             .append(m.chunker).append(':').append(m.previousVersionId);
         for (Manifest.ChunkRef c : m.chunks) identity.append(':').append(c.hash).append(':').append(c.size);
