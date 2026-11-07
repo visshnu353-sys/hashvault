@@ -43,6 +43,8 @@ public class ObjectStoreBenchmark {
         int n = sequence.incrementAndGet();
         payload[0] = (byte) n;
         payload[1] = (byte) (n >>> 8);
+        payload[2] = (byte) (n >>> 16);
+        payload[3] = (byte) (n >>> 24);
         return store.put(payload);
     }
 
