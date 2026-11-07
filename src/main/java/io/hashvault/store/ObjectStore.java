@@ -42,6 +42,7 @@ public final class ObjectStore {
     public void encryptExistingObjects() throws IOException {
         if (encryptionKey == null) throw new IllegalStateException("Encryption key is not configured");
         for (String hash : hashes()) {
+            if (isEncryptedObject(pathFor(hash))) continue;
             byte[] plaintext = get(hash);
             writeObject(hash, plaintext, true);
         }
@@ -51,7 +52,7 @@ public final class ObjectStore {
         String hash = sha256(data);
         Path target = pathFor(hash);
         if (Files.exists(target)) {
-            if (encryptionKey != null) {
+            if (encryptionKey != null && !isEncryptedObject(target)) {
                 byte[] existing = readAndValidate(hash);
                 writeObject(hash, existing, true);
             }
@@ -156,6 +157,13 @@ public final class ObjectStore {
             return walk.filter(Files::isRegularFile).mapToLong(p -> {
                 try { return Files.size(p); } catch (IOException e) { throw new UncheckedIOException(e); }
             }).sum();
+        }
+    }
+    private static boolean isEncryptedObject(Path file) throws IOException {
+        try (DataInputStream in = new DataInputStream(Files.newInputStream(file))) {
+            if (in.readInt() != MAGIC) throw new IOException("Invalid object header: " + file);
+            byte codec = in.readByte();
+            return codec == AES_RAW || codec == AES_GZIP;
         }
     }
     private Path pathFor(String hash) { return root.resolve(hash.substring(0, 2)).resolve(hash + ".blob"); }
