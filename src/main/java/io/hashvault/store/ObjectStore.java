@@ -50,7 +50,13 @@ public final class ObjectStore {
     public String put(byte[] data) throws IOException {
         String hash = sha256(data);
         Path target = pathFor(hash);
-        if (Files.exists(target)) return hash;
+        if (Files.exists(target)) {
+            if (encryptionKey != null) {
+                byte[] existing = readAndValidate(hash);
+                writeObject(hash, existing, true);
+            }
+            return hash;
+        }
         writeObject(hash, data, false);
         cache.put(hash, data);
         return hash;
